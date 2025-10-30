@@ -174,37 +174,6 @@ async def root():
     return {"message": "Candidate Filter API is running"}
 
 
-@app.post("/filter-candidate", response_model=CandidateFilter)
-async def filter_candidate(request: CandidateFilterRequest):
-    """
-    Endpoint to create a candidate filter object.
-    Users can provide any subset of the fields, and the response will be formatted
-    according to the specified structure.
-    """
-
-    # Create experience object
-    experience = ExperienceRange()
-    if request.minExperience is not None:
-        experience.min = request.minExperience
-    if request.maxExperience is not None:
-        experience.max = request.maxExperience
-
-    # Create the filter response
-    candidate_filter = CandidateFilter(
-        name=request.name or "",
-        skills=request.skills or [],
-        optionalSkills=request.optionalSkills or [],
-        instituteName=request.instituteName or [],
-        course=request.course or [],
-        experience=experience,
-        phoneNumber=request.phoneNumber or "",
-        email=request.email or "",
-        companyName=request.companyName or []
-    )
-
-    return candidate_filter
-
-
 def load_candidates_from_csv():
     """Load candidates from CSV file"""
     csv_file = "sample_candidates.csv"
