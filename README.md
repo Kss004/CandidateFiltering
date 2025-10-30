@@ -50,7 +50,11 @@ Once the server is running, you can access:
 
 ### POST /search-candidates
 
-Search for candidates based on filter criteria. Returns matching candidates from the CSV database.
+Search for candidates based on structured filter criteria. Returns matching candidates from the CSV database.
+
+### POST /natural-language-search
+
+Search for candidates using natural language queries. The API parses your natural language input and converts it to structured filters.
 
 **Request Body (all fields optional):**
 ```json
@@ -139,6 +143,13 @@ curl -X POST "http://localhost:8000/search-candidates" \
      }'
 ```
 
+### Natural language search:
+```bash
+curl -X POST "http://localhost:8000/natural-language-search" \
+     -H "Content-Type: application/json" \
+     -d '{"query": "Show me candidates from IIT or MIT with minimum 2 years of experience in java"}'
+```
+
 ### Get all candidates:
 ```bash
 curl -X GET "http://localhost:8000/all-candidates"
@@ -153,14 +164,33 @@ curl -X GET "http://localhost:8000/all-candidates"
 - **Name/Email**: Partial match (case-insensitive)
 - **All filters are optional** - you can search by any combination
 
+## Natural Language Search Examples
+
+The `/natural-language-search` endpoint understands queries like:
+
+- **"Show me candidates from IIT or MIT with minimum 2 years of experience in java"**
+- **"Find python developers with 3-5 years experience from Google or Microsoft"**
+- **"Candidates with react and nodejs skills from Stanford"**
+- **"Show me developers with machine learning experience"**
+- **"Find javascript developers with 1-4 years experience from startups"**
+
+### Supported Keywords:
+
+- **Institutions**: IIT, MIT, Stanford, Harvard, NIT
+- **Skills**: java, python, javascript, react, angular, vue, nodejs, spring, django, docker, kubernetes, aws, machine learning, tensorflow, pytorch
+- **Companies**: google, microsoft, facebook, amazon, tcs, infosys, wipro, netflix, uber, startup
+- **Experience**: "minimum X years", "X-Y years", "at least X years"
+- **Courses**: computer science, MCA, B.Tech, software engineering, data science
+
 ## Project Structure
 
 ```
-├── main.py                 # FastAPI application
-├── sample_candidates.csv   # Sample candidate data
-├── requirements.txt        # Python dependencies
-├── README.md              # This file
-├── quick_test.py          # Direct model testing
-├── test_api.py            # API endpoint testing
-└── test_validation.py     # Validation testing
+├── main.py                      # FastAPI application
+├── sample_candidates.csv        # Sample candidate data
+├── requirements.txt             # Python dependencies
+├── README.md                   # This file
+├── quick_test.py               # Direct model testing
+├── test_api.py                 # API endpoint testing
+├── test_validation.py          # Validation testing
+└── test_natural_language.py    # Natural language search testing
 ```

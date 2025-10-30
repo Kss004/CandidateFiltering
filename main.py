@@ -154,6 +154,22 @@ class CandidateFilterRequest(BaseModel):
         return v
 
 
+class NaturalLanguageRequest(BaseModel):
+    """Request model for natural language search"""
+    query: str = Field(description="Natural language search query")
+
+
+class NaturalLanguageResponse(BaseModel):
+    """Response model for natural language search results"""
+    total_candidates: int = Field(
+        description="Total number of matching candidates")
+    candidates: List[Candidate] = Field(
+        description="List of matching candidates")
+    parsed_query: str = Field(description="How the query was interpreted")
+    filter_applied: CandidateFilter = Field(
+        description="Filter criteria that was extracted")
+
+
 class APIResponse(BaseModel):
     """Standardized API response model for consistent error handling"""
     success: bool = Field(
@@ -167,6 +183,230 @@ class APIResponse(BaseModel):
         default_factory=datetime.utcnow, description="Response timestamp")
     request_id: Optional[str] = Field(
         None, description="Unique request identifier for tracking")
+
+
+def parse_natural_language_query(query: str) -> CandidateFilterRequest:
+    """
+    Parse natural language query into structured filter criteria.
+    Simple NLP parser using regex patterns and keyword matching.
+    """
+    query_lower = query.lower().strip()
+
+    # Initialize filter criteria
+    filter_criteria = CandidateFilterRequest()
+
+    # Parse institutions (IIT, MIT, Stanford, etc.)
+    institution_patterns = [
+        r'\b(iit|indian institute of technology)\b',
+        r'\b(mit|massachusetts institute of technology)\b',
+        r'\bstanford\b',
+        r'\bharvard\b',
+        r'\bcaltech\b',
+        r'\bnit\b'
+    ]
+
+    institutions = []
+    for pattern in institution_patterns:
+        matches = re.findall(pattern, query_lower)
+        for match in matches:
+            if 'iit' in match or 'indian institute' in match:
+                institutions.append('IIT')
+            elif 'mit' in match or 'massachusetts' in match:
+                institutions.append('MIT')
+            elif 'stanford' in match:
+                institutions.append('Stanford')
+            elif 'harvard' in match:
+                institutions.append('Harvard')
+            elif 'caltech' in match:
+                institutions.append('Caltech')
+            elif 'nit' in match:
+                institutions.append('NIT')
+
+    if institutions:
+        filter_criteria.instituteName = list(
+            set(institutions))  # Remove duplicates
+
+    # Parse skills (java, python, javascript, etc.)
+    skill_patterns = {
+        r'\bjava\b(?!\s*script)': 'java',
+        r'\bpython\b': 'python',
+        r'\bjavascript\b|\bjs\b': 'javascript',
+        r'\breact\b': 'react',
+        r'\bangular\b': 'angular',
+        r'\bvue\b': 'vue',
+        r'\bnode\.?js\b': 'nodejs',
+        r'\bspring\b': 'spring',
+        r'\bdjango\b': 'django',
+        r'\bdocker\b': 'docker',
+        r'\bkubernetes\b|\bk8s\b': 'kubernetes',
+        r'\baws\b': 'aws',
+        r'\bmachine learning\b|\bml\b': 'machine learning',
+        r'\btensorflow\b': 'tensorflow',
+        r'\bpytorch\b': 'pytorch',
+        r'\bmicroservices\b': 'microservices',
+        r'\bredis\b': 'redis',
+        r'\btypescript\b': 'typescript',
+        r'\bgraphql\b': 'graphql'
+    }
+
+    skills = []
+    optional_skills = []
+
+    for pattern, skill in skill_patterns.items():
+        if re.search(pattern, query_lower):
+            # Check if it's mentioned as optional/nice-to-have
+            skill_context = re.search(
+                rf'.{{0,20}}{pattern}.{{0,20}}', query_lower)
+            if skill_context:
+                context = skill_context.group()
+                if any(word in context for word in ['optional', 'nice', 'good to have', 'plus', 'bonus']):
+                    optional_skills.append(skill)
+                else:
+                    skills.append(skill)
+
+    if skills:
+        filter_criteria.skills = skills
+    if optional_skills:
+        filter_criteria.optionalSkills = optional_skills
+
+    # Parse experience (minimum/maximum years)
+    exp_patterns = [
+        r'(?:minimum|min|at least|more than)\s+(\d+)\s+years?\s+(?:of\s+)?experience',
+        r'(\d+)\+?\s+years?\s+(?:of\s+)?experience',
+        r'experience\s+(?:of\s+)?(?:minimum|min|at least)\s+(\d+)\s+years?',
+        r'with\s+(\d+)\+?\s+years?\s+(?:of\s+)?experience'
+    ]
+
+    for pattern in exp_patterns:
+        match = re.search(pattern, query_lower)
+        if match:
+            min_exp = int(match.group(1))
+            filter_criteria.minExperience = min_exp
+            break
+
+    # Parse maximum experience
+    max_exp_patterns = [
+        r'(?:maximum|max|up to|less than)\s+(\d+)\s+years?\s+(?:of\s+)?experience',
+        r'experience\s+(?:of\s+)?(?:maximum|max|up to)\s+(\d+)\s+years?'
+    ]
+
+    for pattern in max_exp_patterns:
+        match = re.search(pattern, query_lower)
+        if match:
+            max_exp = int(match.group(1))
+            filter_criteria.maxExperience = max_exp
+            break
+
+    # Parse experience range (e.g., "2-5 years experience")
+    range_pattern = r'(\d+)\s*[-–]\s*(\d+)\s+years?\s+(?:of\s+)?experience'
+    range_match = re.search(range_pattern, query_lower)
+    if range_match:
+        filter_criteria.minExperience = int(range_match.group(1))
+        filter_criteria.maxExperience = int(range_match.group(2))
+
+    # Parse companies
+    company_patterns = {
+        r'\bgoogle\b': 'google',
+        r'\bmicrosoft\b|\bmsft\b': 'microsoft',
+        r'\bfacebook\b|\bmeta\b': 'facebook',
+        r'\bamazon\b': 'amazon',
+        r'\btcs\b': 'tcs',
+        r'\binfosys\b': 'infosys',
+        r'\bwipro\b': 'wipro',
+        r'\bcognizant\b': 'cognizant',
+        r'\bnetflix\b': 'netflix',
+        r'\buber\b': 'uber',
+        r'\bstartup\b': 'startup'
+    }
+
+    companies = []
+    for pattern, company in company_patterns.items():
+        if re.search(pattern, query_lower):
+            companies.append(company)
+
+    if companies:
+        filter_criteria.companyName = companies
+
+    # Parse courses
+    course_patterns = {
+        r'\bcomputer science\b|\bcs\b': 'Computer Science',
+        r'\bmca\b': 'MCA',
+        r'\bb\.?tech\b|\bbachelor of technology\b': 'B.Tech',
+        r'\bm\.?tech\b|\bmaster of technology\b': 'M.Tech',
+        r'\bsoftware engineering\b': 'Software Engineering',
+        r'\binformation technology\b|\bit\b': 'Information Technology',
+        r'\bdata science\b': 'Data Science'
+    }
+
+    courses = []
+    for pattern, course in course_patterns.items():
+        if re.search(pattern, query_lower):
+            courses.append(course)
+
+    if courses:
+        filter_criteria.course = courses
+
+    # Parse names (if mentioned) - be more specific to avoid false positives
+    name_patterns = [
+        r'(?:named?|called)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)',
+        r'candidate\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)(?!\s+(?:with|from|who))'
+    ]
+
+    for pattern in name_patterns:
+        match = re.search(pattern, query_lower)
+        if match:
+            name = match.group(1).strip()
+            # Avoid common words and technical terms
+            excluded_words = [
+                'with', 'from', 'who', 'that', 'have', 'has', 'experience', 'years',
+                'developers', 'developer', 'candidates', 'candidate', 'skills', 'skill',
+                'python', 'java', 'javascript', 'react', 'angular', 'vue', 'nodejs'
+            ]
+            if name.lower() not in excluded_words and not any(word in name.lower() for word in excluded_words):
+                filter_criteria.name = name.title()
+                break
+
+    return filter_criteria
+
+
+def generate_query_interpretation(query: str, filter_criteria: CandidateFilterRequest) -> str:
+    """Generate a human-readable interpretation of what was parsed from the query"""
+    interpretations = []
+
+    if filter_criteria.name:
+        interpretations.append(f"Name contains '{filter_criteria.name}'")
+
+    if filter_criteria.skills:
+        interpretations.append(
+            f"Must have skills: {', '.join(filter_criteria.skills)}")
+
+    if filter_criteria.optionalSkills:
+        interpretations.append(
+            f"Nice to have skills: {', '.join(filter_criteria.optionalSkills)}")
+
+    if filter_criteria.instituteName:
+        interpretations.append(
+            f"From institutions: {', '.join(filter_criteria.instituteName)}")
+
+    if filter_criteria.course:
+        interpretations.append(f"Course: {', '.join(filter_criteria.course)}")
+
+    if filter_criteria.minExperience is not None:
+        interpretations.append(
+            f"Minimum {filter_criteria.minExperience} years experience")
+
+    if filter_criteria.maxExperience is not None:
+        interpretations.append(
+            f"Maximum {filter_criteria.maxExperience} years experience")
+
+    if filter_criteria.companyName:
+        interpretations.append(
+            f"From companies: {', '.join(filter_criteria.companyName)}")
+
+    if not interpretations:
+        return "No specific criteria found - showing all candidates"
+
+    return "; ".join(interpretations)
 
 
 @app.get("/")
@@ -326,6 +566,56 @@ async def search_candidates(request: CandidateFilterRequest):
     return CandidateSearchResponse(
         total_candidates=len(matching_candidates),
         candidates=matching_candidates,
+        filter_applied=filter_applied
+    )
+
+
+@app.post("/natural-language-search", response_model=NaturalLanguageResponse)
+async def natural_language_search(request: NaturalLanguageRequest):
+    """
+    Search for candidates using natural language queries.
+
+    Examples:
+    - "Show me candidates from IIT or MIT with minimum 2 years of experience in java"
+    - "Find python developers with 3-5 years experience from Google or Microsoft"
+    - "Candidates with react and nodejs skills from Stanford"
+    """
+    # Parse the natural language query
+    filter_criteria = parse_natural_language_query(request.query)
+
+    # Load candidates from CSV
+    all_candidates = load_candidates_from_csv()
+
+    # Filter candidates based on parsed criteria
+    matching_candidates = filter_candidates(all_candidates, filter_criteria)
+
+    # Generate interpretation
+    interpretation = generate_query_interpretation(
+        request.query, filter_criteria)
+
+    # Create the filter object for response
+    experience = ExperienceRange()
+    if filter_criteria.minExperience is not None:
+        experience.min = filter_criteria.minExperience
+    if filter_criteria.maxExperience is not None:
+        experience.max = filter_criteria.maxExperience
+
+    filter_applied = CandidateFilter(
+        name=filter_criteria.name or "",
+        skills=filter_criteria.skills or [],
+        optionalSkills=filter_criteria.optionalSkills or [],
+        instituteName=filter_criteria.instituteName or [],
+        course=filter_criteria.course or [],
+        experience=experience,
+        phoneNumber=filter_criteria.phoneNumber or "",
+        email=filter_criteria.email or "",
+        companyName=filter_criteria.companyName or []
+    )
+
+    return NaturalLanguageResponse(
+        total_candidates=len(matching_candidates),
+        candidates=matching_candidates,
+        parsed_query=interpretation,
         filter_applied=filter_applied
     )
 
