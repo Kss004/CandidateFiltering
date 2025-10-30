@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field, validator, EmailStr
 from typing import List, Optional
 import re
 from datetime import datetime
+import pandas as pd
+import os
 
 app = FastAPI(title="Candidate Filter API", version="1.0.0")
 
@@ -51,6 +53,30 @@ class CandidateFilter(BaseModel):
     email: str = Field(default="", description="Contact email address")
     companyName: List[str] = Field(
         default_factory=list, description="Company names")
+
+
+class Candidate(BaseModel):
+    """Model representing a candidate from the CSV data"""
+    name: str
+    skills: List[str]
+    optionalSkills: List[str]
+    instituteName: str
+    course: str
+    minExperience: int
+    maxExperience: int
+    phoneNumber: str
+    email: str
+    companyName: List[str]
+
+
+class CandidateSearchResponse(BaseModel):
+    """Response model for candidate search results"""
+    total_candidates: int = Field(
+        description="Total number of matching candidates")
+    candidates: List[Candidate] = Field(
+        description="List of matching candidates")
+    filter_applied: CandidateFilter = Field(
+        description="Filter criteria that was applied")
 
 
 class CandidateFilterRequest(BaseModel):
@@ -177,6 +203,168 @@ async def filter_candidate(request: CandidateFilterRequest):
     )
 
     return candidate_filter
+
+
+def load_candidates_from_csv():
+    """Load candidates from CSV file"""
+    csv_file = "sample_candidates.csv"
+    if not os.path.exists(csv_file):
+        return []
+
+    try:
+        df = pd.read_csv(csv_file)
+        candidates = []
+
+        for _, row in df.iterrows():
+            # Parse comma-separated skills
+            skills = [skill.strip() for skill in str(
+                row['skills']).split(',') if skill.strip()]
+            optional_skills = [skill.strip() for skill in str(
+                row['optionalSkills']).split(',') if skill.strip()]
+            company_names = [company.strip() for company in str(
+                row['companyName']).split(',') if company.strip()]
+
+            candidate = Candidate(
+                name=str(row['name']),
+                skills=skills,
+                optionalSkills=optional_skills,
+                instituteName=str(row['instituteName']),
+                course=str(row['course']),
+                minExperience=int(row['minExperience']),
+                maxExperience=int(row['maxExperience']),
+                phoneNumber=str(row['phoneNumber']),
+                email=str(row['email']),
+                companyName=company_names
+            )
+            candidates.append(candidate)
+
+        return candidates
+    except Exception as e:
+        print(f"Error loading CSV: {e}")
+        return []
+
+
+def filter_candidates(candidates: List[Candidate], filter_criteria: CandidateFilterRequest) -> List[Candidate]:
+    """Filter candidates based on the provided criteria"""
+    filtered = []
+
+    for candidate in candidates:
+        match = True
+
+        # Name filter (partial match, case insensitive)
+        if filter_criteria.name and filter_criteria.name.strip():
+            if filter_criteria.name.lower() not in candidate.name.lower():
+                match = False
+                continue
+
+        # Skills filter (candidate must have ALL required skills)
+        if filter_criteria.skills:
+            candidate_skills_lower = [skill.lower()
+                                      for skill in candidate.skills]
+            for required_skill in filter_criteria.skills:
+                if required_skill.lower() not in candidate_skills_lower:
+                    match = False
+                    break
+            if not match:
+                continue
+
+        # Optional skills filter (candidate should have at least one)
+        if filter_criteria.optionalSkills:
+            candidate_all_skills = [
+                skill.lower() for skill in candidate.skills + candidate.optionalSkills]
+            has_optional_skill = any(opt_skill.lower() in candidate_all_skills
+                                     for opt_skill in filter_criteria.optionalSkills)
+            if not has_optional_skill:
+                match = False
+                continue
+
+        # Institution filter
+        if filter_criteria.instituteName:
+            if candidate.instituteName.lower() not in [inst.lower() for inst in filter_criteria.instituteName]:
+                match = False
+                continue
+
+        # Course filter
+        if filter_criteria.course:
+            if candidate.course.lower() not in [course.lower() for course in filter_criteria.course]:
+                match = False
+                continue
+
+        # Experience filter
+        if filter_criteria.minExperience is not None:
+            if candidate.maxExperience < filter_criteria.minExperience:
+                match = False
+                continue
+
+        if filter_criteria.maxExperience is not None:
+            if candidate.minExperience > filter_criteria.maxExperience:
+                match = False
+                continue
+
+        # Email filter (partial match)
+        if filter_criteria.email and filter_criteria.email.strip():
+            if filter_criteria.email.lower() not in candidate.email.lower():
+                match = False
+                continue
+
+        # Company filter
+        if filter_criteria.companyName:
+            candidate_companies_lower = [
+                company.lower() for company in candidate.companyName]
+            has_company = any(company.lower() in candidate_companies_lower
+                              for company in filter_criteria.companyName)
+            if not has_company:
+                match = False
+                continue
+
+        if match:
+            filtered.append(candidate)
+
+    return filtered
+
+
+@app.post("/search-candidates", response_model=CandidateSearchResponse)
+async def search_candidates(request: CandidateFilterRequest):
+    """
+    Search for candidates based on filter criteria.
+    Returns matching candidates from the CSV data.
+    """
+    # Load candidates from CSV
+    all_candidates = load_candidates_from_csv()
+
+    # Filter candidates based on criteria
+    matching_candidates = filter_candidates(all_candidates, request)
+
+    # Create the filter object for response
+    experience = ExperienceRange()
+    if request.minExperience is not None:
+        experience.min = request.minExperience
+    if request.maxExperience is not None:
+        experience.max = request.maxExperience
+
+    filter_applied = CandidateFilter(
+        name=request.name or "",
+        skills=request.skills or [],
+        optionalSkills=request.optionalSkills or [],
+        instituteName=request.instituteName or [],
+        course=request.course or [],
+        experience=experience,
+        phoneNumber=request.phoneNumber or "",
+        email=request.email or "",
+        companyName=request.companyName or []
+    )
+
+    return CandidateSearchResponse(
+        total_candidates=len(matching_candidates),
+        candidates=matching_candidates,
+        filter_applied=filter_applied
+    )
+
+
+@app.get("/all-candidates", response_model=List[Candidate])
+async def get_all_candidates():
+    """Get all candidates from the CSV file"""
+    return load_candidates_from_csv()
 
 
 @app.get("/health")

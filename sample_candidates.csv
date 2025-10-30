@@ -1,0 +1,7 @@
+name,skills,optionalSkills,instituteName,course,minExperience,maxExperience,phoneNumber,email,companyName
+John Doe,"java,python","react,angular",MIT,Computer Science,2,5,+1-555-0101,john@email.com,"google,microsoft"
+Jane Smith,"javascript,nodejs","vue,docker",Stanford,Software Engineering,1,3,+1-555-0102,jane@email.com,"facebook,amazon"
+Mike Johnson,"python,django","aws,kubernetes",IIT,MCA,3,7,+1-555-0103,mike@email.com,"tcs,infosys"
+Sarah Wilson,"java,spring","microservices,redis",IIT,Computer Science,4,8,+1-555-0104,sarah@email.com,"wipro,cognizant"
+David Brown,"react,javascript","typescript,graphql",MIT,Information Technology,1,4,+1-555-0105,david@email.com,"startup,freelance"
+Lisa Garcia,"python,machine learning","tensorflow,pytorch",Stanford,Data Science,2,6,+1-555-0106,lisa@email.com,"netflix,uber"

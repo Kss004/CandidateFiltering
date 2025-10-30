@@ -1,98 +1,159 @@
 #!/usr/bin/env python3
 """
-Simple test script to demonstrate the Candidate Filter API functionality.
-Run this after starting the FastAPI server.
+Test script to demonstrate the API filtering capabilities
 """
 
 import requests
 import json
 
+# Base URL for the API
 BASE_URL = "http://localhost:8000"
 
 
-def test_api():
-    """Test the candidate filter API with various scenarios."""
-
+def test_api_filtering():
     print("Testing Candidate Filter API")
     print("=" * 50)
 
-    # Test 1: Full request with all fields
-    print("\n1. Testing with all fields:")
-    full_request = {
-        "name": "John Doe",
-        "skills": ["java", "python", "sql"],
-        "optionalSkills": ["javascript", "react"],
-        "instituteName": ["IIT Delhi", "IIT Mumbai"],
-        "course": ["MCA", "B.Tech"],
-        "minExperience": 2,
-        "maxExperience": 8,
-        "phoneNumber": "+91-9876543210",
-        "email": "john.doe@example.com",
-        "companyName": ["tcs", "infosys", "wipro"]
-    }
+    # Test cases demonstrating different filtering scenarios
+    test_cases = [
+        {
+            "name": "Test 1: Single skill filter",
+            "data": {
+                "skills": ["java"]
+            }
+        },
+        {
+            "name": "Test 2: Multiple skills filter",
+            "data": {
+                "skills": ["java", "python"],
+                "optionalSkills": ["react"]
+            }
+        },
+        {
+            "name": "Test 3: Experience range only",
+            "data": {
+                "minExperience": 2,
+                "maxExperience": 5
+            }
+        },
+        {
+            "name": "Test 4: Institution and course filter",
+            "data": {
+                "instituteName": ["IIT", "MIT"],
+                "course": ["Computer Science"]
+            }
+        },
+        {
+            "name": "Test 5: Company filter",
+            "data": {
+                "companyName": ["tcs", "google"]
+            }
+        },
+        {
+            "name": "Test 6: Complete filter",
+            "data": {
+                "name": "John",
+                "skills": ["java"],
+                "optionalSkills": ["react", "angular"],
+                "instituteName": ["MIT"],
+                "course": ["Computer Science"],
+                "minExperience": 2,
+                "maxExperience": 5,
+                "email": "john@email.com",
+                "companyName": ["google"]
+            }
+        },
+        {
+            "name": "Test 7: Empty filter (all defaults)",
+            "data": {}
+        },
+        {
+            "name": "Test 8: Only optional skills",
+            "data": {
+                "optionalSkills": ["docker", "kubernetes"]
+            }
+        }
+    ]
 
-    try:
-        response = requests.post(
-            f"{BASE_URL}/filter-candidate", json=full_request)
-        response.raise_for_status()
-        print("Request:", json.dumps(full_request, indent=2))
-        print("Response:", json.dumps(response.json(), indent=2))
-    except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
+    for test_case in test_cases:
+        print(f"\n{test_case['name']}:")
+        print(f"Request: {json.dumps(test_case['data'], indent=2)}")
 
-    # Test 2: Partial request (only skills and experience)
-    print("\n2. Testing with partial fields (skills and experience only):")
-    partial_request = {
-        "skills": ["java"],
-        "minExperience": 1,
-        "maxExperience": 5
-    }
+        try:
+            response = requests.post(
+                f"{BASE_URL}/filter-candidate", json=test_case['data'])
 
-    try:
-        response = requests.post(
-            f"{BASE_URL}/filter-candidate", json=partial_request)
-        response.raise_for_status()
-        print("Request:", json.dumps(partial_request, indent=2))
-        print("Response:", json.dumps(response.json(), indent=2))
-    except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
+            if response.status_code == 200:
+                result = response.json()
+                print("✓ Success!")
+                print(f"Response: {json.dumps(result, indent=2)}")
+            else:
+                print(f"✗ Error: {response.status_code}")
+                print(f"Response: {response.text}")
 
-    # Test 3: Empty request
-    print("\n3. Testing with empty request:")
-    empty_request = {}
+        except requests.exceptions.ConnectionError:
+            print(
+                "✗ Connection Error: Make sure the API server is running on localhost:8000")
+            print("  Run: python main.py")
+            break
+        except Exception as e:
+            print(f"✗ Error: {e}")
 
-    try:
-        response = requests.post(
-            f"{BASE_URL}/filter-candidate", json=empty_request)
-        response.raise_for_status()
-        print("Request:", json.dumps(empty_request, indent=2))
-        print("Response:", json.dumps(response.json(), indent=2))
-    except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
+        print("-" * 30)
 
-    # Test 4: Only experience min
-    print("\n4. Testing with only minimum experience:")
-    min_exp_request = {
-        "minExperience": 3
-    }
 
-    try:
-        response = requests.post(
-            f"{BASE_URL}/filter-candidate", json=min_exp_request)
-        response.raise_for_status()
-        print("Request:", json.dumps(min_exp_request, indent=2))
-        print("Response:", json.dumps(response.json(), indent=2))
-    except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
+def test_validation_errors():
+    print("\n\nTesting Validation Errors")
+    print("=" * 50)
+
+    error_test_cases = [
+        {
+            "name": "Invalid email format",
+            "data": {"email": "invalid-email"}
+        },
+        {
+            "name": "Invalid phone number",
+            "data": {"phoneNumber": "123"}
+        },
+        {
+            "name": "Invalid experience range",
+            "data": {"minExperience": 10, "maxExperience": 5}
+        },
+        {
+            "name": "Negative experience",
+            "data": {"minExperience": -1}
+        }
+    ]
+
+    for test_case in error_test_cases:
+        print(f"\n{test_case['name']}:")
+        print(f"Request: {json.dumps(test_case['data'], indent=2)}")
+
+        try:
+            response = requests.post(
+                f"{BASE_URL}/filter-candidate", json=test_case['data'])
+
+            if response.status_code == 422:
+                print("✓ Validation error correctly caught!")
+                error_detail = response.json()
+                print(f"Error: {json.dumps(error_detail, indent=2)}")
+            else:
+                print(
+                    f"✗ Expected validation error, got: {response.status_code}")
+                print(f"Response: {response.text}")
+
+        except requests.exceptions.ConnectionError:
+            print("✗ Connection Error: Make sure the API server is running")
+            break
+        except Exception as e:
+            print(f"✗ Error: {e}")
 
 
 if __name__ == "__main__":
-    try:
-        # Test if server is running
-        response = requests.get(f"{BASE_URL}/health")
-        response.raise_for_status()
-        print(f"Server is running at {BASE_URL}")
-        test_api()
-    except requests.exceptions.RequestException:
-        print(f"Error: Server is not running at {BASE_URL}")
-        print("Please start the FastAPI server first by running: python main.py")
+    print("Make sure to start the API server first:")
+    print("python main.py")
+    print("\nThen run this test script in another terminal")
+    print("=" * 50)
+
+    test_api_filtering()
+    test_validation_errors()
